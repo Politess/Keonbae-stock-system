@@ -369,19 +369,19 @@ INSERT INTO restaurants (id, name, location, contact_email) VALUES
 -- staff.central@keonbae.com / staff123
 -- staff.north@keonbae.com / staff123
 INSERT INTO users (id, restaurant_id, full_name, email, password_hash, role) VALUES
-    ('u0000000-0000-0000-0000-000000000001', NULL, 'System Administrator',
+    ('d0000000-0000-0000-0000-000000000001', NULL, 'System Administrator',
      'admin@keonbae.com',
      '$2b$12$jSFq8.GehrqVrIPqEDoOJOPjJEh3VnUdY.kvDgFvy/MFkSx8Td9zG',
      'administrator'),
-    ('u0000000-0000-0000-0000-000000000002', NULL, 'Central Management',
+    ('d0000000-0000-0000-0000-000000000002', NULL, 'Central Management',
      'central@keonbae.com',
      '$2b$12$VTcUkbHL0aF0pkjkH5o3wuHvI3.JRMU52aLI5O4WMcgYRq3IZdU2W',
      'central_management'),
-    ('u0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001',
+    ('d0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001',
      'Central Branch Staff', 'staff.central@keonbae.com',
      '$2b$12$xKB0nQ8.Kdq2gWUZIaKMLOlk4nGHHJxQTBkUSwM5L6dwBuwGo7BAi',
      'restaurant_staff'),
-    ('u0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000002',
+    ('d0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000002',
      'North Branch Staff', 'staff.north@keonbae.com',
      '$2b$12$xKB0nQ8.Kdq2gWUZIaKMLOlk4nGHHJxQTBkUSwM5L6dwBuwGo7BAi',
      'restaurant_staff');
