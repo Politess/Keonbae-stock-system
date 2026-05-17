@@ -578,12 +578,265 @@
       min-width: 140px;
     }
     
-    /* RESPONSIVE */
+    /* MOBILE MENU TOGGLE */
+    .mobile-menu-toggle {
+      display: none;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-medium);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+    
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 99;
+    }
+    
+    /* RESPONSIVE - TABLET */
+    @media (max-width: 1024px) {
+      body { padding: 8px; }
+      
+      .sidebar {
+        width: 220px;
+      }
+      
+      .content {
+        padding: 16px 20px;
+      }
+      
+      .topbar {
+        padding: 14px 20px;
+      }
+      
+      .cards-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      table {
+        font-size: 12px;
+      }
+      
+      th, td {
+        padding: 8px 12px;
+      }
+    }
+    
+    /* RESPONSIVE - MOBILE */
     @media (max-width: 768px) {
-      .sidebar { width: 60px; }
-      .sidebar-logo h1, .sidebar-logo p, .user-info, .nav-label, .nav-item span { display: none; }
-      .nav-item { justify-content: center; padding: 12px; }
-      .form-row { grid-template-columns: 1fr; }
+      body { padding: 0; }
+      
+      .app {
+        height: 100vh;
+        border-radius: 0;
+        border: none;
+        position: relative;
+      }
+      
+      .container { padding: 0; }
+      
+      /* Slide-out sidebar */
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 260px;
+        z-index: 100;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease-in-out;
+        box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+      }
+      
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      
+      .sidebar-overlay.show {
+        display: block;
+      }
+      
+      .mobile-menu-toggle {
+        display: inline-flex;
+      }
+      
+      .topbar {
+        padding: 12px 16px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      
+      .topbar h2 {
+        font-size: 16px;
+      }
+      
+      .role-badge {
+        font-size: 10px;
+        padding: 3px 8px;
+      }
+      
+      .content {
+        padding: 16px;
+      }
+      
+      .main {
+        width: 100%;
+      }
+      
+      /* Cards stack on mobile */
+      .cards-row {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      
+      .metric-card {
+        padding: 12px;
+      }
+      
+      .metric-card .mval {
+        font-size: 22px;
+      }
+      
+      .metric-card .mlabel {
+        font-size: 11px;
+      }
+      
+      /* Tables become horizontally scrollable */
+      .panel {
+        margin-bottom: 14px;
+      }
+      
+      .panel-header {
+        padding: 12px 14px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      
+      .panel-header h3 {
+        font-size: 13px;
+      }
+      
+      table {
+        font-size: 11px;
+      }
+      
+      th {
+        padding: 8px 10px;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      
+      td {
+        padding: 8px 10px;
+        white-space: nowrap;
+      }
+      
+      /* Make tables scroll horizontally */
+      .panel > table,
+      .panel > div > table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+      
+      /* Forms stack vertically */
+      .form-row {
+        grid-template-columns: 1fr !important;
+      }
+      
+      /* Modal full screen on mobile */
+      .modal-overlay {
+        padding: 0;
+      }
+      
+      .modal {
+        max-height: 100vh;
+        height: 100vh;
+        border-radius: 0;
+        max-width: 100%;
+      }
+      
+      .modal-header {
+        padding: 14px 16px;
+      }
+      
+      .modal-body {
+        padding: 16px;
+      }
+      
+      .modal-footer {
+        padding: 12px 16px;
+      }
+      
+      /* Order item rows stack on mobile */
+      .order-item-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+        margin-bottom: 14px;
+        padding-bottom: 14px;
+        border-bottom: 1px dashed var(--border-soft);
+      }
+      
+      /* Touch-friendly buttons */
+      .btn {
+        padding: 10px 14px;
+        font-size: 14px;
+        min-height: 38px;
+      }
+      
+      .btn-sm {
+        padding: 7px 11px;
+        font-size: 12px;
+        min-height: 32px;
+      }
+      
+      /* Login box mobile */
+      .login-box {
+        margin: 16px;
+        padding: 24px;
+        max-width: 100%;
+      }
+      
+      /* Filters stack on mobile */
+      .filters {
+        flex-direction: column;
+      }
+      
+      .filters select,
+      .filters input {
+        width: 100%;
+        max-width: 100% !important;
+      }
+      
+      input, select, textarea {
+        font-size: 16px; /* Prevents zoom on iOS */
+      }
+    }
+    
+    /* RESPONSIVE - SMALL MOBILE */
+    @media (max-width: 480px) {
+      .cards-row {
+        grid-template-columns: 1fr;
+      }
+      
+      .topbar h2 {
+        font-size: 14px;
+      }
+      
+      .login-box {
+        padding: 20px 16px;
+      }
+      
+      .login-box h1 {
+        font-size: 20px;
+      }
     }
   </style>
 </head>
@@ -607,6 +860,17 @@
       localStorage.setItem('theme', next);
       render();
     }
+
+    function toggleMobileSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      if (sidebar && overlay) {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('show');
+      }
+    }
+    
+    // Close sidebar when navigating on mobile
     
     // ============== STATE ==============
     const API = 'https://keonbae-stock-system.vercel.app/api';
@@ -722,6 +986,13 @@
     }
     
     async function navigate(section) {
+      // Close mobile sidebar on navigation
+      if (window.innerWidth <= 768) {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebarOverlay');
+        if (sidebar) sidebar.classList.remove('open');
+        if (overlay) overlay.classList.remove('show');
+      }
       if (section === 'newOrder') {
         showNewOrderModal();
         return;
@@ -1234,7 +1505,8 @@
       
       root.innerHTML = `
         <div class="app">
-          <div class="sidebar">
+            <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar()"></div>
+            <div class="sidebar" id="sidebar">
             <div class="sidebar-logo">
               <div class="icon"><i class="ti ti-building-store"></i></div>
               <div>
@@ -1261,7 +1533,12 @@
           </div>
           <div class="main">
             <div class="topbar">
-              <h2 id="pageTitle">${getSectionTitle()}</h2>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="mobile-menu-toggle" onclick="toggleMobileSidebar()">
+                  <i class="ti ti-menu-2"></i>
+                </button>
+                <h2 id="pageTitle">${getSectionTitle()}</h2>
+              </div>
               <span class="role-badge">${state.user.role.replace(/_/g, ' ')}</span>
             </div>
             <div class="content">
