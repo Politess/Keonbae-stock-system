@@ -601,7 +601,7 @@
     }
     
     /* RESPONSIVE - TABLET */
-    @media (max-width: 1024px) {
+    @media (max-width: 1280px) {
       body { padding: 8px; }
       
       .sidebar {
@@ -627,24 +627,32 @@
       th, td {
         padding: 8px 12px;
       }
-      
-      /* Stack ALL form rows on tablet to prevent overlap */
-      .form-row {
-        grid-template-columns: 1fr !important;
+    }
+    
+    /* Always stack form rows in modals to prevent overlap on tablets */
+    @media (max-width: 1200px) {
+      .modal .form-row,
+      .modal-body .form-row {
+        display: flex !important;
+        flex-direction: column !important;
         gap: 14px !important;
       }
       
-      .modal {
-        max-width: 90%;
+      .modal .form-row > .form-group,
+      .modal-body .form-row > .form-group {
+        width: 100% !important;
+        margin-bottom: 0 !important;
       }
       
-      .form-group {
-        margin-bottom: 14px;
-      }
-      
-      input[type="date"] {
-        width: 100%;
-        min-width: 100%;
+      .modal input[type="date"],
+      .modal input[type="text"],
+      .modal input[type="email"],
+      .modal input[type="number"],
+      .modal select,
+      .modal textarea {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
       }
     }
     
