@@ -1007,6 +1007,7 @@
         { id: 'myOrders', icon: 'ti-file-text', label: 'My Orders' },
         { id: 'newOrder', icon: 'ti-plus', label: 'New Order' },
         { id: 'myStock', icon: 'ti-package', label: 'My Stock' },
+	{ id: 'centralStock', icon: 'ti-building-warehouse', label: 'Central Kitchen Stock' },
         { id: 'lowStock', icon: 'ti-alert-triangle', label: 'Low Stock Alerts' },
         { id: 'movements', icon: 'ti-history', label: 'Stock Log' }
       ];
@@ -1037,6 +1038,7 @@
         else if (section === 'movements') await loadMovements();
         else if (section === 'items') await loadItems();
 	else if (section === 'restaurantStocks') await loadRestaurantStocks();
+	else if (section === 'centralStock') await loadKitchenStock();
         else if (section === 'restaurants') await loadRestaurants();
         else if (section === 'users') await loadUsers();
       } catch (err) {
@@ -1619,6 +1621,8 @@
         myOrders: 'My Orders',
         kitchenStock: 'Kitchen Stock',
         restaurantStock: 'Restaurant Stocks',
+	myStock: 'My Restaurant Stock',
+        centralStock: 'Central Kitchen Stock',
         lowStock: 'Low Stock Alerts',
         movements: 'Stock Movement Log',
         items: 'Item Management',
@@ -1633,6 +1637,7 @@
       if (s === 'dashboard') return renderDashboard();
       if (s === 'orders' || s === 'myOrders') return renderOrders();
       if (s === 'kitchenStock') return renderKitchenStock();
+      if (s === 'centralStock') return renderCentralStockView();
       if (s === 'myStock') return renderMyStock();
       if (s === 'lowStock') return renderLowStock();
       if (s === 'movements') return renderMovements();
@@ -1857,6 +1862,49 @@
       return actions.length ? `<div style="display:flex;gap:6px">${actions.join('')}</div>` : '<span style="color:var(--text-tertiary)">-</span>';
     }
     
+    function renderCentralStockView() {
+      const filtered = applyFilters(state.kitchenStock);
+      const lowItems = state.kitchenStock.filter(i => i.is_low).length;
+      
+      return `
+        <div class="alert alert-info" style="background:var(--bg-info);color:var(--text-info);margin-bottom:16px;padding:12px 16px;border-radius:var(--radius-md);font-size:13px;display:flex;align-items:center;gap:10px">
+          <i class="ti ti-info-circle"></i>
+          <div>
+            <strong>View only:</strong> Check the central kitchen's stock levels before placing orders to avoid over-ordering items that are low or out of stock.
+          </div>
+        </div>
+        
+        <div class="cards-row">
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-package"></i> Total Items</div>
+            <div class="mval">${state.kitchenStock.length}</div>
+            <div class="msub">In central kitchen</div>
+          </div>
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-alert-triangle"></i> Low Stock</div>
+            <div class="mval ${lowItems > 0 ? 'danger' : 'ok'}">${lowItems}</div>
+            <div class="msub">Below minimum</div>
+          </div>
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-circle-check"></i> Available</div>
+            <div class="mval ok">${state.kitchenStock.length - lowItems}</div>
+            <div class="msub">Healthy stock</div>
+          </div>
+        </div>
+        
+        ${renderFilterBar(state.kitchenStock)}
+        
+        <div class="panel">
+          <div class="panel-header">
+            <h3><i class="ti ti-building-warehouse"></i> Central Kitchen Stock Levels</h3>
+            <span style="font-size:12px;color:var(--text-secondary)">${filtered.length} of ${state.kitchenStock.length} items</span>
+          </div>
+          ${renderStockTable(filtered)}
+        </div>
+      `;
+    }
+    
+
     function renderKitchenStock() {
       const filtered = applyFilters(state.kitchenStock);
       return `
