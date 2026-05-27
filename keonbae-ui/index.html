@@ -918,6 +918,7 @@
       filterCategory: 'all',
       filterSearch: '',
       selectedRestaurantId: null,
+      allRestaurantStocks: [],
       showArchived: false,
       loading: false,
       error: null
@@ -1007,7 +1008,7 @@
         { id: 'myOrders', icon: 'ti-file-text', label: 'My Orders' },
         { id: 'newOrder', icon: 'ti-plus', label: 'New Order' },
         { id: 'myStock', icon: 'ti-package', label: 'My Stock' },
-	{ id: 'centralStock', icon: 'ti-building-warehouse', label: 'Central Kitchen Stock' },
+	{ id: 'centralStock', icon: 'ti-building-store', label: 'All Restaurant Stocks' },
         { id: 'lowStock', icon: 'ti-alert-triangle', label: 'Low Stock Alerts' },
         { id: 'movements', icon: 'ti-history', label: 'Stock Log' }
       ];
@@ -1038,7 +1039,7 @@
         else if (section === 'movements') await loadMovements();
         else if (section === 'items') await loadItems();
 	else if (section === 'restaurantStocks') await loadRestaurantStocks();
-	else if (section === 'centralStock') await loadKitchenStock();
+	else if (section === 'centralStock') await loadAllRestaurantStocks();
         else if (section === 'restaurants') await loadRestaurants();
         else if (section === 'users') await loadUsers();
       } catch (err) {
@@ -1082,6 +1083,20 @@
     async function loadOrders() { 
       const url = state.showArchived ? '/orders?include_archived=true' : '/orders';
       state.orders = await api('GET', url); 
+    }
+    async function loadAllRestaurantStocks() {
+      const restaurants = await api('GET', '/restaurants');
+      state.restaurants = restaurants;
+      const allStocks = [];
+      for (const r of restaurants) {
+        const stocks = await api('GET', `/restaurant-stock/${r.id}`);
+        allStocks.push(...stocks.map(s => ({ 
+          ...s, 
+          restaurant_id: r.id, 
+          restaurant_name: r.name 
+        })));
+      }
+      state.allRestaurantStocks = allStocks;
     }
     async function loadKitchenStock() { state.kitchenStock = await api('GET', '/kitchen/stock'); }
     async function loadRestaurantStock() {
@@ -1622,7 +1637,7 @@
         kitchenStock: 'Kitchen Stock',
         restaurantStock: 'Restaurant Stocks',
 	myStock: 'My Restaurant Stock',
-        centralStock: 'Central Kitchen Stock',
+        centralStock: 'All Restaurant Stocks',
         lowStock: 'Low Stock Alerts',
         movements: 'Stock Movement Log',
         items: 'Item Management',
@@ -1863,45 +1878,125 @@
     }
     
     function renderCentralStockView() {
-      const filtered = applyFilters(state.kitchenStock);
-      const lowItems = state.kitchenStock.filter(i => i.is_low).length;
+      const filtered = applyFilters(state.allRestaurantStocks);
+      const totalItems = state.allRestaurantStocks.length;
+      const lowItems = state.allRestaurantStocks.filter(i => i.is_low).length;
+      
+      // Group by restaurant for the summary cards
+      const restaurantGroups = {};
+      state.allRestaurantStocks.forEach(s => {
+        if (!restaurantGroups[s.restaurant_name]) {
+          restaurantGroups[s.restaurant_name] = { total: 0, low: 0 };
+        }
+        restaurantGroups[s.restaurant_name].total++;
+        if (s.is_low) restaurantGroups[s.restaurant_name].low++;
+      });
+      
+      // Restaurant filter buttons
+      const uniqueRestaurants = [...new Set(state.allRestaurantStocks.map(s => s.restaurant_name))].sort();
+      const restaurantFilter = state.selectedRestaurantFilter || 'all';
+      
+      const finalFiltered = restaurantFilter === 'all' 
+        ? filtered 
+        : filtered.filter(s => s.restaurant_name === restaurantFilter);
       
       return `
         <div class="alert alert-info" style="background:var(--bg-info);color:var(--text-info);margin-bottom:16px;padding:12px 16px;border-radius:var(--radius-md);font-size:13px;display:flex;align-items:center;gap:10px">
           <i class="ti ti-info-circle"></i>
           <div>
-            <strong>View only:</strong> Check the central kitchen's stock levels before placing orders to avoid over-ordering items that are low or out of stock.
+            <strong>View only:</strong> Check stock levels across all restaurants to avoid duplicate ordering. See what other branches have available.
           </div>
         </div>
         
         <div class="cards-row">
           <div class="metric-card">
             <div class="mlabel"><i class="ti ti-package"></i> Total Items</div>
-            <div class="mval">${state.kitchenStock.length}</div>
-            <div class="msub">In central kitchen</div>
+            <div class="mval">${totalItems}</div>
+            <div class="msub">Across all restaurants</div>
           </div>
           <div class="metric-card">
-            <div class="mlabel"><i class="ti ti-alert-triangle"></i> Low Stock</div>
+            <div class="mlabel"><i class="ti ti-building-store"></i> Restaurants</div>
+            <div class="mval">${uniqueRestaurants.length}</div>
+            <div class="msub">Branches tracked</div>
+          </div>
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-alert-triangle"></i> Low Stock Items</div>
             <div class="mval ${lowItems > 0 ? 'danger' : 'ok'}">${lowItems}</div>
-            <div class="msub">Below minimum</div>
-          </div>
-          <div class="metric-card">
-            <div class="mlabel"><i class="ti ti-circle-check"></i> Available</div>
-            <div class="mval ok">${state.kitchenStock.length - lowItems}</div>
-            <div class="msub">Healthy stock</div>
+            <div class="msub">Need attention</div>
           </div>
         </div>
         
-        ${renderFilterBar(state.kitchenStock)}
+        <div class="panel" style="margin-bottom:16px">
+          <div class="panel-header">
+            <h3><i class="ti ti-filter"></i> Filter by Restaurant</h3>
+          </div>
+          <div style="padding:16px;display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn ${restaurantFilter === 'all' ? 'btn-primary' : ''}" 
+                    onclick="setRestaurantFilter('all')">
+              <i class="ti ti-building-store"></i> All Restaurants
+              <span style="font-size:11px;opacity:0.7;margin-left:4px">(${totalItems})</span>
+            </button>
+            ${uniqueRestaurants.map(r => {
+              const stats = restaurantGroups[r];
+              return `<button class="btn ${restaurantFilter === r ? 'btn-primary' : ''}" 
+                              onclick="setRestaurantFilter('${r}')">
+                <i class="ti ti-building-store"></i> ${r}
+                <span style="font-size:11px;opacity:0.7;margin-left:4px">(${stats.total}${stats.low > 0 ? ` · ${stats.low} low` : ''})</span>
+              </button>`;
+            }).join('')}
+          </div>
+        </div>
+        
+        ${renderFilterBar(state.allRestaurantStocks)}
         
         <div class="panel">
           <div class="panel-header">
-            <h3><i class="ti ti-building-warehouse"></i> Central Kitchen Stock Levels</h3>
-            <span style="font-size:12px;color:var(--text-secondary)">${filtered.length} of ${state.kitchenStock.length} items</span>
+            <h3><i class="ti ti-building-store"></i> ${restaurantFilter === 'all' ? 'All Restaurant Stocks' : restaurantFilter + ' — Stock'}</h3>
+            <span style="font-size:12px;color:var(--text-secondary)">${finalFiltered.length} items</span>
           </div>
-          ${renderStockTable(filtered)}
+          ${finalFiltered.length === 0 ? '<div class="empty"><i class="ti ti-package"></i>No stock items found</div>' : `
+            <table>
+              <thead>
+                <tr>
+                  <th>Restaurant</th>
+                  <th>SKU</th>
+                  <th>Item</th>
+                  <th>Category</th>
+                  <th>Quantity</th>
+                  <th>Minimum</th>
+                  <th>Level</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${finalFiltered.map(i => {
+                  const qty = parseFloat(i.quantity);
+                  const min = parseFloat(i.min_quantity);
+                  const pct = Math.min(100, (qty / Math.max(min * 2, 1)) * 100);
+                  const col = qty < min ? '#E24B4A' : qty < min * 1.3 ? '#BA7517' : '#1D9E75';
+                  return `
+                    <tr>
+                      <td style="font-weight:500">${i.restaurant_name}</td>
+                      <td style="font-family:monospace;font-size:11px;color:var(--text-secondary)">${i.sku || '-'}</td>
+                      <td style="font-weight:500">${i.name}</td>
+                      <td style="color:var(--text-secondary)">${i.category}</td>
+                      <td>${qty.toFixed(1)} ${i.unit}</td>
+                      <td style="color:var(--text-secondary)">${min.toFixed(1)} ${i.unit}</td>
+                      <td><div class="stock-bar-bg"><div class="stock-bar-fill" style="width:${pct}%;background:${col}"></div></div></td>
+                      <td>${i.is_low ? '<span class="badge badge-low">Low</span>' : '<span class="badge badge-ok">OK</span>'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          `}
         </div>
       `;
+    }
+    
+    function setRestaurantFilter(restaurantName) {
+      state.selectedRestaurantFilter = restaurantName;
+      render();
     }
     
 
