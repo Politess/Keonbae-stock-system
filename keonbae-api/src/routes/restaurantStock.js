@@ -13,7 +13,12 @@ function ownRestaurantOrPrivileged(req, res, next) {
   return res.status(403).json({ error: 'Access denied' });
 }
 
-router.get('/:restaurant_id', ownRestaurantOrPrivileged, async (req, res, next) => {
+function viewOnlyAccess(req, res, next) {
+  // All authenticated users can view stock (read-only for non-owners)
+  return next();
+}
+
+router.get('/:restaurant_id', vietOnlyAccess, async (req, res, next) => {
   try {
     const { rows } = await query(
       `SELECT rs.id, i.id AS item_id, i.sku, i.name, i.category, i.unit,
