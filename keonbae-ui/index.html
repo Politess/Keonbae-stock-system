@@ -1209,6 +1209,7 @@
                 <tr>
                   <th>Date</th><th>Order</th><th>Restaurant</th><th>SKU</th>
                   <th>Item</th><th>Category</th><th>Quantity</th><th>Unit Price</th><th>Total</th>
+                  ${isAdmin() ? '<th>Actions</th>' : ''}
                 </tr>
               </thead>
               <tbody>
@@ -1223,6 +1224,13 @@
                     <td>${parseFloat(item.quantity).toFixed(1)} ${item.unit}</td>
                     <td style="color:var(--text-secondary)">${currency}${parseFloat(item.unit_price).toFixed(2)}</td>
                     <td style="font-weight:600">${currency}${parseFloat(item.line_total).toFixed(2)}</td>
+                    ${isAdmin() ? `
+                      <td>
+                        <button class="btn btn-sm btn-danger" onclick="removeSummaryItem('${item.order_ref}', '${item.sku}', '${item.name}')" title="Remove from summary">
+                          <i class="ti ti-trash"></i>
+                        </button>
+                      </td>
+                    ` : ''}
                   </tr>
                 `).join('')}
               </tbody>
@@ -1341,7 +1349,38 @@
         </div>
       `;
     }
-    
+    async function removeSummaryItem(orderRef, sku, itemName) {
+      const confirmMsg = `Remove "${itemName}" (${sku}) from order ${orderRef}?\n\nThis will delete the line item permanently from the order. The order will remain but won't include this item in the summary.`;
+      if (!confirm(confirmMsg)) return;
+      
+      try {
+        // Find the order ID
+        const orders = await api('GET', '/orders?include_archived=true');
+        const order = orders.find(o => o.order_ref === orderRef);
+        if (!order) {
+          alert('Order not found');
+          return;
+        }
+        
+        // Get the full order with items
+        const fullOrder = await api('GET', `/orders/${order.id}`);
+        const item = fullOrder.items.find(i => i.sku === sku);
+        if (!item) {
+          alert('Item not found in order');
+          return;
+        }
+        
+        // Delete the line item
+        await api('DELETE', `/orders/${order.id}/items/${item.id}`);
+        
+        // Reload summary
+        await loadMonthlySummary();
+        render();
+      } catch (err) { 
+        alert(err.message); 
+      }
+    }
+
     function exportSummaryCSV() {
       const s = state.summary;
       if (!s) return;

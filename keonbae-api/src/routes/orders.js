@@ -237,4 +237,20 @@ router.patch('/:id/cancel', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Delete a line item from an order (admin only)
+router.delete('/:id/items/:item_id', authorize('administrator'),
+  async (req, res, next) => {
+    try {
+      const order = await getOrder(req.params.id);
+      if (!order) return res.status(404).json({ error: 'Order not found' });
+      
+      await query(
+        `DELETE FROM order_items WHERE id = $1 AND order_id = $2`,
+        [req.params.item_id, req.params.id]
+      );
+      res.json({ deleted: true });
+    } catch (err) { next(err); }
+  }
+);
+
 module.exports = router;
