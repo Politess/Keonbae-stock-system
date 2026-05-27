@@ -18,7 +18,7 @@ function viewOnlyAccess(req, res, next) {
   return next();
 }
 
-router.get('/:restaurant_id', vietOnlyAccess, async (req, res, next) => {
+router.get('/:restaurant_id', viewOnlyAccess, async (req, res, next) => {
   try {
     const { rows } = await query(
       `SELECT rs.id, i.id AS item_id, i.sku, i.name, i.category, i.unit,
