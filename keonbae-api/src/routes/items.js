@@ -10,7 +10,7 @@ router.use(authenticate);
 router.get('/', async (req, res, next) => {
   try {
     const { rows } = await query(
-      `SELECT id, sku, name,  category, unit, description, is_active, created_at
+      `SELECT id, sku, name,  category, unit, unit_price,  description, is_active, created_at
        FROM items WHERE is_active = TRUE ORDER BY category, name`
     );
     res.json(rows);
@@ -42,13 +42,13 @@ router.get('/:id', async (req, res, next) => {
 // Create
 router.post('/', authorize('administrator', 'central_management'), async (req, res, next) => {
   try {
-    const { name, category, unit, description } = req.body;
+    const { name, category, unit, unit_price,  description } = req.body;
     if (!name || !category || !unit)
       return res.status(400).json({ error: 'name, category and unit are required' });
     const { rows } = await query(
-      `INSERT INTO items (name, sku,  category, unit, description)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [name, sku || null, category, unit, description]
+      `INSERT INTO items (name, sku,  category, unit, unit_price,  description)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [name, sku || null, category, unit, unit_price || 0,  description]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -60,17 +60,18 @@ router.post('/', authorize('administrator', 'central_management'), async (req, r
 // Update
 router.patch('/:id', authorize('administrator', 'central_management', 'restaurant_staff'), async (req, res, next) => {
   try {
-    const { name, sku,  category, unit, description, is_active } = req.body;
+    const { name, sku,  category, unit, unit_price,  description, is_active } = req.body;
     const { rows } = await query(
       `UPDATE items SET
          name = COALESCE($1, name),
 	 sku = COALESCE($2, sku),
          category = COALESCE($3, category),
          unit = COALESCE($4, unit),
-         description = COALESCE($5, description),
-         is_active = COALESCE($6, is_active)
-       WHERE id = $7 RETURNING *`,
-      [name, sku, category, unit, description, is_active, req.params.id]
+	 unit_price = COALESCE($5, unit_price),
+         description = COALESCE($6, description),
+         is_active = COALESCE($7, is_active)
+       WHERE id = $8 RETURNING *`,
+      [name, sku, category, unit, unit_price, description, is_active, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);

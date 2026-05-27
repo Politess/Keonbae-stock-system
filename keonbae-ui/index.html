@@ -989,6 +989,7 @@
           { id: 'movements', icon: 'ti-history', label: 'Stock Log' },
           { id: 'items', icon: 'ti-box', label: 'Item Management' },
           { id: 'restaurants', icon: 'ti-building-store', label: 'Restaurants' },
+	  { id: 'monthlySummary', icon: 'ti-chart-bar', label: 'Monthly Summary' },
           { id: 'users', icon: 'ti-users', label: 'User Management' }
         ];
       }
@@ -1000,6 +1001,7 @@
           { id: 'lowStock', icon: 'ti-alert-triangle', label: 'Low Stock Alerts' },
           { id: 'movements', icon: 'ti-history', label: 'Stock Log' },
           { id: 'items', icon: 'ti-box', label: 'Item Management' }
+	  { id: 'monthlySummary', icon: 'ti-chart-bar', label: 'Monthly Summary' },
         ];
       }
       // Restaurant staff
@@ -1041,6 +1043,7 @@
 	else if (section === 'restaurantStocks') await loadRestaurantStocks();
 	else if (section === 'centralStock') await loadAllRestaurantStocks();
         else if (section === 'restaurants') await loadRestaurants();
+	else if (section === 'monthlySummary') await loadMonthlySummary();
         else if (section === 'users') await loadUsers();
       } catch (err) {
         alert(err.message);
@@ -1146,6 +1149,235 @@
     }
     async function loadRestaurants() {
       state.restaurants = await api('GET', '/restaurants');
+    }
+    async function loadMonthlySummary() {
+      const now = new Date();
+      const year = state.summaryYear || now.getFullYear();
+      const month = state.summaryMonth || (now.getMonth() + 1);
+      state.summary = await api('GET', `/summary/monthly?year=${year}&month=${month}`);
+      state.summaryYear = year;
+      state.summaryMonth = month;
+    }
+    
+    async function changeSummaryPeriod(year, month) {
+      state.summaryYear = year;
+      state.summaryMonth = month;
+      state.loading = true;
+      render();
+      await loadMonthlySummary();
+      state.loading = false;
+      render();
+    }
+    
+    function renderMonthlySummary() {
+      const s = state.summary;
+      if (!s) return '<div class="loading">Loading summary...</div>';
+      
+      const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const monthName = monthNames[s.period.month - 1];
+      const currency = '£';
+      
+      // Previous and next month helpers
+      const prevMonth = s.period.month === 1 ? { year: s.period.year - 1, month: 12 } : { year: s.period.year, month: s.period.month - 1 };
+      const nextMonth = s.period.month === 12 ? { year: s.period.year + 1, month: 1 } : { year: s.period.year, month: s.period.month + 1 };
+      
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="changeSummaryPeriod(${prevMonth.year}, ${prevMonth.month})">
+              <i class="ti ti-chevron-left"></i> Previous
+            </button>
+            <h3 style="margin:0;font-size:18px;font-weight:600">${monthName} ${s.period.year}</h3>
+            <button class="btn btn-sm" onclick="changeSummaryPeriod(${nextMonth.year}, ${nextMonth.month})">
+              Next <i class="ti ti-chevron-right"></i>
+            </button>
+          </div>
+          <button class="btn" onclick="exportSummaryCSV()">
+            <i class="ti ti-download"></i> Export CSV
+          </button>
+        </div>
+        
+        <!-- STOCK Section -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3><i class="ti ti-package"></i> Stock — Items Ordered</h3>
+            <span style="font-size:12px;color:var(--text-secondary)">${s.total_items} line items across ${s.total_orders} orders</span>
+          </div>
+          ${s.items_detail.length === 0 ? '<div class="empty"><i class="ti ti-package"></i>No orders received this month</div>' : `
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th><th>Order</th><th>Restaurant</th><th>SKU</th>
+                  <th>Item</th><th>Category</th><th>Quantity</th><th>Unit Price</th><th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${s.items_detail.map(item => `
+                  <tr>
+                    <td style="font-size:11px;color:var(--text-secondary)">${new Date(item.created_at).toLocaleDateString()}</td>
+                    <td style="font-weight:500;font-size:12px">${item.order_ref}</td>
+                    <td style="font-size:12px">${item.restaurant_name}</td>
+                    <td style="font-family:monospace;font-size:11px;color:var(--text-secondary)">${item.sku || '-'}</td>
+                    <td style="font-weight:500">${item.name}</td>
+                    <td style="color:var(--text-secondary);font-size:12px">${item.category}</td>
+                    <td>${parseFloat(item.quantity).toFixed(1)} ${item.unit}</td>
+                    <td style="color:var(--text-secondary)">${currency}${parseFloat(item.unit_price).toFixed(2)}</td>
+                    <td style="font-weight:600">${currency}${parseFloat(item.line_total).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+        
+        <!-- COST Section -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3><i class="ti ti-coin"></i> Cost — Breakdown by Category</h3>
+          </div>
+          ${s.by_category.length === 0 ? '<div class="empty"><i class="ti ti-coin"></i>No cost data this month</div>' : `
+            <table>
+              <thead>
+                <tr><th>Category</th><th>Line Items</th><th>Total Quantity</th><th>Total Cost</th><th>% of Total</th></tr>
+              </thead>
+              <tbody>
+                ${s.by_category.map(c => {
+                  const pct = s.grand_total > 0 ? (parseFloat(c.total_cost) / s.grand_total * 100) : 0;
+                  return `
+                    <tr>
+                      <td style="font-weight:500">${c.category}</td>
+                      <td>${c.line_count}</td>
+                      <td>${parseFloat(c.total_quantity).toFixed(1)}</td>
+                      <td style="font-weight:600">${currency}${parseFloat(c.total_cost).toFixed(2)}</td>
+                      <td>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <div class="stock-bar-bg" style="width:80px"><div class="stock-bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>
+                          <span style="font-size:11px">${pct.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+        
+        <!-- SUMMARY Section -->
+        <div class="cards-row">
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-shopping-cart"></i> Total Orders</div>
+            <div class="mval">${s.total_orders}</div>
+            <div class="msub">Received this month</div>
+          </div>
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-package"></i> Total Items</div>
+            <div class="mval">${s.total_items}</div>
+            <div class="msub">Line items processed</div>
+          </div>
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-coin"></i> Grand Total</div>
+            <div class="mval">${currency}${s.grand_total.toFixed(2)}</div>
+            <div class="msub">Total cost ${monthName}</div>
+          </div>
+        </div>
+        
+        <div class="panel">
+          <div class="panel-header">
+            <h3><i class="ti ti-clipboard-list"></i> Summary — By Restaurant</h3>
+          </div>
+          ${s.by_restaurant.length === 0 ? '<div class="empty"><i class="ti ti-clipboard-list"></i>No data</div>' : `
+            <table>
+              <thead>
+                <tr><th>Restaurant</th><th>Orders</th><th>Total Quantity</th><th>Total Cost</th><th>% of Total</th></tr>
+              </thead>
+              <tbody>
+                ${s.by_restaurant.map(r => {
+                  const pct = s.grand_total > 0 ? (parseFloat(r.total_cost) / s.grand_total * 100) : 0;
+                  return `
+                    <tr>
+                      <td style="font-weight:500">${r.restaurant_name}</td>
+                      <td>${r.order_count}</td>
+                      <td>${parseFloat(r.total_quantity).toFixed(1)}</td>
+                      <td style="font-weight:600">${currency}${parseFloat(r.total_cost).toFixed(2)}</td>
+                      <td>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <div class="stock-bar-bg" style="width:80px"><div class="stock-bar-fill" style="width:${pct}%;background:var(--accent)"></div></div>
+                          <span style="font-size:11px">${pct.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+        
+        <div class="panel">
+          <div class="panel-header">
+            <h3><i class="ti ti-list"></i> Order-Level Breakdown</h3>
+          </div>
+          ${s.orders.length === 0 ? '<div class="empty"><i class="ti ti-list"></i>No orders</div>' : `
+            <table>
+              <thead>
+                <tr><th>Order Ref</th><th>Restaurant</th><th>Date</th><th>Requested By</th><th>Items</th><th>Total Qty</th><th>Total Cost</th></tr>
+              </thead>
+              <tbody>
+                ${s.orders.map(o => `
+                  <tr>
+                    <td style="font-weight:600">${o.order_ref}</td>
+                    <td>${o.restaurant_name}</td>
+                    <td style="color:var(--text-secondary);font-size:12px">${new Date(o.created_at).toLocaleDateString()}</td>
+                    <td style="color:var(--text-secondary);font-size:12px">${o.requested_by}</td>
+                    <td>${o.item_count}</td>
+                    <td>${parseFloat(o.total_quantity).toFixed(1)}</td>
+                    <td style="font-weight:600">${currency}${parseFloat(o.total_cost).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+      `;
+    }
+    
+    function exportSummaryCSV() {
+      const s = state.summary;
+      if (!s) return;
+      const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const monthName = monthNames[s.period.month - 1];
+      
+      let csv = `Keonbae Monthly Order Summary - ${monthName} ${s.period.year}\n\n`;
+      csv += `Total Orders,${s.total_orders}\n`;
+      csv += `Total Items,${s.total_items}\n`;
+      csv += `Grand Total,£${s.grand_total.toFixed(2)}\n\n`;
+      
+      csv += 'ITEMS DETAIL\n';
+      csv += 'Date,Order,Restaurant,SKU,Item,Category,Quantity,Unit,Unit Price,Line Total\n';
+      s.items_detail.forEach(i => {
+        csv += `${new Date(i.created_at).toLocaleDateString()},${i.order_ref},"${i.restaurant_name}",${i.sku || ''},"${i.name}",${i.category},${parseFloat(i.quantity).toFixed(2)},${i.unit},${parseFloat(i.unit_price).toFixed(2)},${parseFloat(i.line_total).toFixed(2)}\n`;
+      });
+      
+      csv += '\nBY CATEGORY\n';
+      csv += 'Category,Line Items,Total Quantity,Total Cost\n';
+      s.by_category.forEach(c => {
+        csv += `${c.category},${c.line_count},${parseFloat(c.total_quantity).toFixed(2)},${parseFloat(c.total_cost).toFixed(2)}\n`;
+      });
+      
+      csv += '\nBY RESTAURANT\n';
+      csv += 'Restaurant,Orders,Total Quantity,Total Cost\n';
+      s.by_restaurant.forEach(r => {
+        csv += `"${r.restaurant_name}",${r.order_count},${parseFloat(r.total_quantity).toFixed(2)},${parseFloat(r.total_cost).toFixed(2)}\n`;
+      });
+      
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `keonbae-summary-${s.period.year}-${String(s.period.month).padStart(2,'0')}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
     }
     async function loadUsers() {
       state.users = await api('GET', '/users');
@@ -1413,6 +1645,12 @@
                   </select>
                 </div>
               </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Unit Price (£)</label>
+                  <input type="number" id="itemPrice" step="0.01" min="0" value="${item ? (item.unit_price || 0) : ''}" placeholder="0.00">
+                </div>
+              </div>
               <div class="form-group">
                 <label>Description (optional)</label>
                 <textarea id="itemDesc" rows="2">${item ? (item.description || '') : ''}</textarea>
@@ -1434,6 +1672,7 @@
         sku: document.getElementById('itemSku').value || null,
         category: document.getElementById('itemCategory').value,
         unit: document.getElementById('itemUnit').value,
+        unit_price: parseFloat(document.getElementById('itemPrice').value) || 0,
         description: document.getElementById('itemDesc').value
       };
       if (!data.name || !data.category || !data.unit) {
@@ -1642,6 +1881,7 @@
         movements: 'Stock Movement Log',
         items: 'Item Management',
         restaurants: 'Restaurants',
+	monthlySummary: 'Monthly Order Summary',
         users: 'User Management'
       };
       return titles[state.section] || 'Dashboard';
@@ -1659,6 +1899,7 @@
       if (s === 'items') return renderItems();
       if (s === 'restaurantStocks') return renderRestaurantStocks();
       if (s === 'restaurants') return renderRestaurants();
+      if (s === 'monthlySummary') return renderMonthlySummary();
       if (s === 'users') return renderUsers();
       return '';
     }
@@ -1904,7 +2145,7 @@
         <div class="alert alert-info" style="background:var(--bg-info);color:var(--text-info);margin-bottom:16px;padding:12px 16px;border-radius:var(--radius-md);font-size:13px;display:flex;align-items:center;gap:10px">
           <i class="ti ti-info-circle"></i>
           <div>
-            <strong>View only:</strong> Check stock levels across all restaurants to avoid duplicate ordering. See what other branches have available.
+            <strong>View only:</strong>
           </div>
         </div>
         
