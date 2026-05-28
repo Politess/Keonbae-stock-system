@@ -985,6 +985,7 @@
           { id: 'dashboard', icon: 'ti-layout-dashboard', label: 'Dashboard' },
           { id: 'orders', icon: 'ti-list-check', label: 'All Orders' },
           { id: 'restaurantStocks', icon: 'ti-building-store', label: 'Restaurant Stocks' },
+	  { id: 'centralKitchen', icon: 'ti-building-warehouse', label: 'Central Kitchen Stock' },
           { id: 'lowStock', icon: 'ti-alert-triangle', label: 'Low Stock Alerts' },
           { id: 'movements', icon: 'ti-history', label: 'Stock Log' },
           { id: 'items', icon: 'ti-box', label: 'Item Management' },
@@ -998,6 +999,7 @@
           { id: 'dashboard', icon: 'ti-layout-dashboard', label: 'Dashboard' },
           { id: 'orders', icon: 'ti-list-check', label: 'All Orders' },
           { id: 'restaurantStocks', icon: 'ti-building-store', label: 'Restaurant Stocks' },
+	  { id: 'centralKitchen', icon: 'ti-building-warehouse', label: 'Central Kitchen Stock' },
           { id: 'lowStock', icon: 'ti-alert-triangle', label: 'Low Stock Alerts' },
           { id: 'movements', icon: 'ti-history', label: 'Stock Log' },
           { id: 'items', icon: 'ti-box', label: 'Item Management' },
@@ -1041,6 +1043,7 @@
         else if (section === 'movements') await loadMovements();
         else if (section === 'items') await loadItems();
 	else if (section === 'restaurantStocks') await loadRestaurantStocks();
+	else if (section === 'centralKitchen') await loadKitchenStock();
 	else if (section === 'centralStock') await loadAllRestaurantStocks();
         else if (section === 'restaurants') await loadRestaurants();
 	else if (section === 'monthlySummary') await loadMonthlySummary();
@@ -1505,6 +1508,9 @@
         try { state.units = await api('GET', '/items/meta/units'); }
         catch (err) { alert(err.message); return; }
       }
+      // Load central kitchen stock so we know available amounts
+      try { state.kitchenStock = await api('GET', '/kitchen/stock'); }
+      catch (err) { alert(err.message); return; }
       
       const html = `
         <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
@@ -1548,9 +1554,15 @@
         grouped[i.category].push(i);
       });
       
+      const kitchenMap = {};
+      (state.kitchenStock || []).forEach(k => { kitchenMap[k.item_id] = parseFloat(k.quantity); });
+      
       const itemOptions = Object.keys(grouped).sort().map(cat => `
         <optgroup label="${cat}">
-          ${grouped[cat].map(i => `<option value="${i.id}" data-unit="${i.unit}">${i.sku ? '[' + i.sku + '] ' : ''}${i.name}</option>`).join('')}
+          ${grouped[cat].map(i => {
+            const avail = kitchenMap[i.id] !== undefined ? kitchenMap[i.id] : 0;
+            return `<option value="${i.id}" data-unit="${i.unit}" data-avail="${avail}">${i.sku ? '[' + i.sku + '] ' : ''}${i.name} — ${avail} ${i.unit} available</option>`;
+          }).join('')}
         </optgroup>
       `).join('');
       
@@ -1586,9 +1598,17 @@
     function updateItemUnit(sel) {
       const row = sel.closest('.order-item-row');
       const unitSelect = row.querySelector('.item-unit');
+      const qtyInput = row.querySelector('.item-qty');
       const option = sel.options[sel.selectedIndex];
       const unit = option.dataset.unit || '';
+      const avail = parseFloat(option.dataset.avail || '0');
       if (unit) unitSelect.value = unit;
+      // Store available amount on the row for validation
+      row.dataset.avail = avail;
+      if (qtyInput) {
+        qtyInput.max = avail;
+        qtyInput.title = `Maximum available: ${avail} ${unit}`;
+      }
     }
     
     function updateQty(sel) {
@@ -1615,15 +1635,23 @@
     
     async function submitOrder() {
       const items = [];
+      let overLimit = null;
       document.querySelectorAll('.order-item-row').forEach(row => {
         const sel = row.querySelector('.item-select');
         const qty = row.querySelector('.item-qty');
         if (sel.value && qty.value && parseFloat(qty.value) > 0) {
-          items.push({ item_id: sel.value, quantity: parseFloat(qty.value) });
+          const requested = parseFloat(qty.value);
+          const avail = parseFloat(row.dataset.avail || '0');
+          const itemName = sel.options[sel.selectedIndex].text.split(' — ')[0];
+          if (requested > avail) {
+            overLimit = `${itemName}: you requested ${requested} but only ${avail} is available in central kitchen.`;
+          }
+          items.push({ item_id: sel.value, quantity: requested });
         }
       });
       
       if (!items.length) { alert('Please add at least one item with quantity'); return; }
+      if (overLimit) { alert('Cannot place order:\n\n' + overLimit); return; }
       
       const notes = document.getElementById('orderNotes').value;
       const needed_by_date = document.getElementById('neededDate').value;
@@ -1914,6 +1942,7 @@
         myOrders: 'My Orders',
         kitchenStock: 'Kitchen Stock',
         restaurantStock: 'Restaurant Stocks',
+	centralKitchen: 'Central Kitchen Stock',
 	myStock: 'My Restaurant Stock',
         centralStock: 'All Restaurant Stocks',
         lowStock: 'Low Stock Alerts',
@@ -1937,6 +1966,7 @@
       if (s === 'movements') return renderMovements();
       if (s === 'items') return renderItems();
       if (s === 'restaurantStocks') return renderRestaurantStocks();
+      if (s === 'centralKitchen') return renderCentralKitchenManagement();
       if (s === 'restaurants') return renderRestaurants();
       if (s === 'monthlySummary') return renderMonthlySummary();
       if (s === 'users') return renderUsers();
@@ -2279,6 +2309,137 @@
       render();
     }
     
+    function renderCentralKitchenManagement() {
+      const filtered = applyFilters(state.kitchenStock);
+      const lowItems = state.kitchenStock.filter(i => i.is_low).length;
+      
+      return `
+        <div class="alert alert-info" style="background:var(--bg-info);color:var(--text-info);margin-bottom:16px;padding:12px 16px;border-radius:var(--radius-md);font-size:13px;display:flex;align-items:center;gap:10px">
+          <i class="ti ti-info-circle"></i>
+          <div>
+            <strong>Central Kitchen Stock:</strong> Set the available quantity for each item. Restaurants can only order up to the amount you have available here.
+          </div>
+        </div>
+        
+        <div class="cards-row">
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-package"></i> Total Items</div>
+            <div class="mval">${state.kitchenStock.length}</div>
+            <div class="msub">In central kitchen</div>
+          </div>
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-alert-triangle"></i> Low Stock</div>
+            <div class="mval ${lowItems > 0 ? 'danger' : 'ok'}">${lowItems}</div>
+            <div class="msub">Below minimum</div>
+          </div>
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-circle-check"></i> Available</div>
+            <div class="mval ok">${state.kitchenStock.length - lowItems}</div>
+            <div class="msub">Healthy stock</div>
+          </div>
+        </div>
+        
+        ${renderFilterBar(state.kitchenStock)}
+        
+        <div class="panel">
+          <div class="panel-header">
+            <h3><i class="ti ti-building-warehouse"></i> Central Kitchen Inventory</h3>
+            <span style="font-size:12px;color:var(--text-secondary)">${filtered.length} of ${state.kitchenStock.length} items</span>
+          </div>
+          ${filtered.length === 0 ? '<div class="empty"><i class="ti ti-package"></i>No items found</div>' : `
+            <table>
+              <thead>
+                <tr><th>SKU</th><th>Item</th><th>Category</th><th>Available</th><th>Minimum</th><th>Level</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                ${filtered.map(i => {
+                  const qty = parseFloat(i.quantity);
+                  const min = parseFloat(i.min_quantity);
+                  const pct = Math.min(100, (qty / Math.max(min * 2, 1)) * 100);
+                  const col = qty < min ? '#E24B4A' : qty < min * 1.3 ? '#BA7517' : '#1D9E75';
+                  return `
+                    <tr>
+                      <td style="font-family:monospace;font-size:11px;color:var(--text-secondary)">${i.sku || '-'}</td>
+                      <td style="font-weight:500">${i.name}</td>
+                      <td style="color:var(--text-secondary)">${i.category}</td>
+                      <td style="font-weight:600">${qty.toFixed(1)} ${i.unit}</td>
+                      <td style="color:var(--text-secondary)">${min.toFixed(1)} ${i.unit}</td>
+                      <td><div class="stock-bar-bg"><div class="stock-bar-fill" style="width:${pct}%;background:${col}"></div></div></td>
+                      <td>${i.is_low ? '<span class="badge badge-low">Low</span>' : '<span class="badge badge-ok">OK</span>'}</td>
+                      <td>
+                        <button class="btn btn-sm" onclick="showKitchenStockModal('${i.item_id}')">
+                          <i class="ti ti-edit"></i> Set
+                        </button>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+      `;
+    }
+    
+    function showKitchenStockModal(itemId) {
+      const stock = state.kitchenStock.find(s => s.item_id === itemId);
+      if (!stock) return;
+      
+      const html = `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal">
+            <div class="modal-header">
+              <h3><i class="ti ti-building-warehouse"></i> Set Central Kitchen Stock</h3>
+              <button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button>
+            </div>
+            <div class="modal-body">
+              <div class="alert" style="background:var(--bg-secondary);padding:12px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:13px">
+                <strong>${stock.name}</strong>
+                <span style="font-family:monospace;font-size:11px;color:var(--text-secondary);margin-left:8px">[${stock.sku || ''}]</span>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Available Quantity</label>
+                  <input type="number" id="kitchenQty" step="0.1" min="0" 
+                         value="${parseFloat(stock.quantity)}" placeholder="e.g. 100">
+                </div>
+                <div class="form-group">
+                  <label>Minimum Level</label>
+                  <input type="number" id="kitchenMin" step="0.1" min="0"
+                         value="${parseFloat(stock.min_quantity)}" placeholder="e.g. 20">
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Unit</label>
+                <input type="text" value="${stock.unit}" disabled style="background:var(--bg-secondary)">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn" onclick="closeModal()">Cancel</button>
+              <button class="btn btn-primary" onclick="saveKitchenStock('${itemId}')">
+                <i class="ti ti-check"></i> Save
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('modalContainer').innerHTML = html;
+    }
+    
+    async function saveKitchenStock(itemId) {
+      const quantity = parseFloat(document.getElementById('kitchenQty').value);
+      const min_quantity = parseFloat(document.getElementById('kitchenMin').value);
+      
+      if (isNaN(quantity) || quantity < 0) { alert('Please enter a valid quantity'); return; }
+      if (isNaN(min_quantity) || min_quantity < 0) { alert('Please enter a valid minimum'); return; }
+      
+      try {
+        await api('PUT', `/kitchen/stock/${itemId}`, { quantity, min_quantity });
+        closeModal();
+        await loadKitchenStock();
+        render();
+      } catch (err) { alert(err.message); }
+    }
 
     function renderKitchenStock() {
       const filtered = applyFilters(state.kitchenStock);

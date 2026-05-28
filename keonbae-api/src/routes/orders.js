@@ -79,6 +79,27 @@ router.post('/', async (req, res, next) => {
       if (!it.item_id || !it.quantity || it.quantity <= 0)
         return res.status(400).json({ error: 'Each item needs item_id and quantity > 0' });
     }
+
+    // Validate requested quantities against available kitchen stock
+    for (const it of items) {
+      const { rows: stockRows } = await query(
+        `SELECT ks.quantity, i.name FROM kitchen_stock ks
+         JOIN items i ON i.id = ks.item_id
+         WHERE ks.item_id = $1`,
+        [it.item_id]
+      );
+      if (!stockRows[0]) {
+        const { rows: itemRows } = await query(`SELECT name FROM items WHERE id = $1`, [it.item_id]);
+        const name = itemRows[0]?.name || 'Item';
+        return res.status(400).json({ error: `${name} is not available in central kitchen stock` });
+      }
+      const available = parseFloat(stockRows[0].quantity);
+      if (it.quantity > available) {
+        return res.status(400).json({
+          error: `Cannot order ${it.quantity} of ${stockRows[0].name} — only ${available} available in central kitchen`
+        });
+      }
+    }
     const { rows: orderRows } = await query(
       `INSERT INTO stock_orders (order_ref, restaurant_id, requested_by, notes, needed_by_date)
        VALUES (next_order_ref(), $1, $2, $3, $4) RETURNING *`,
