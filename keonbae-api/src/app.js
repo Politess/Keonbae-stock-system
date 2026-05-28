@@ -17,6 +17,7 @@ app.use('/api/orders',           require('./routes/orders'));
 app.use('/api/movements',        require('./routes/movements'));
 app.use('/api/low-stock-reasons', require('./routes/lowStockReasons'));
 app.use('/api/summary', require('./routes/summary'));
+app.use('/api/stock-counts', require('./routes/stockCounts'));
 
 app.use((err, req, res, _next) => {
   console.error(err);

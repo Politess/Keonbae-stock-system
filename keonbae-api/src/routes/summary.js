@@ -121,4 +121,118 @@ router.get('/monthly', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Weekly usage: received - counted = used, with cost
+router.get('/weekly', async (req, res, next) => {
+  try {
+    const { week_start, restaurant_id } = req.query;
+    if (!week_start) return res.status(400).json({ error: 'week_start (YYYY-MM-DD) is required' });
+
+    // Week range: week_start to week_start + 7 days
+    const start = new Date(week_start);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
+
+    const recvConditions = [
+      `so.received_at >= $1`,
+      `so.received_at < $2`,
+      `so.status = 'received'`
+    ];
+    const recvValues = [startStr, endStr];
+    if (restaurant_id) {
+      recvValues.push(restaurant_id);
+      recvConditions.push(`so.restaurant_id = $${recvValues.length}`);
+    }
+
+    // Received quantities per item this week
+    const received = await query(
+      `SELECT 
+        i.id AS item_id, i.sku, i.name, i.category, i.unit, COALESCE(i.unit_price,0) AS unit_price,
+        r.id AS restaurant_id, r.name AS restaurant_name,
+        SUM(COALESCE(oi.received_quantity, oi.dispatched_quantity, oi.approved_quantity, oi.requested_quantity)) AS received_qty
+       FROM stock_orders so
+       JOIN restaurants r ON r.id = so.restaurant_id
+       JOIN order_items oi ON oi.order_id = so.id
+       JOIN items i ON i.id = oi.item_id
+       WHERE ${recvConditions.join(' AND ')}
+       GROUP BY i.id, i.sku, i.name, i.category, i.unit, i.unit_price, r.id, r.name`,
+      recvValues
+    );
+
+    // Stock counts in the same week
+    const countConditions = [
+      `sc.count_date >= $1`,
+      `sc.count_date < $2`
+    ];
+    const countValues = [startStr, endStr];
+    if (restaurant_id) {
+      countValues.push(restaurant_id);
+      countConditions.push(`sc.restaurant_id = $${countValues.length}`);
+    }
+
+    const counts = await query(
+      `SELECT sc.item_id, sc.restaurant_id, sc.quantity_counted
+       FROM stock_counts sc
+       WHERE ${countConditions.join(' AND ')}`,
+      countValues
+    );
+
+    // Build a lookup for counts
+    const countMap = {};
+    counts.rows.forEach(c => {
+      countMap[`${c.restaurant_id}:${c.item_id}`] = parseFloat(c.quantity_counted);
+    });
+
+    // Calculate usage per item
+    const usage = received.rows.map(r => {
+      const receivedQty = parseFloat(r.received_qty);
+      const key = `${r.restaurant_id}:${r.item_id}`;
+      const counted = countMap[key];
+      const hasCounts = counted !== undefined;
+      const used = hasCounts ? Math.max(0, receivedQty - counted) : null;
+      const unitPrice = parseFloat(r.unit_price);
+      const usedCost = used !== null ? used * unitPrice : null;
+      return {
+        sku: r.sku,
+        name: r.name,
+        category: r.category,
+        unit: r.unit,
+        unit_price: unitPrice,
+        restaurant_name: r.restaurant_name,
+        received_qty: receivedQty,
+        counted_qty: hasCounts ? counted : null,
+        used_qty: used,
+        used_cost: usedCost
+      };
+    });
+
+    // Totals
+    const totalUsedCost = usage.reduce((s, u) => s + (u.used_cost || 0), 0);
+    const totalReceivedQty = usage.reduce((s, u) => s + u.received_qty, 0);
+    const itemsCounted = usage.filter(u => u.counted_qty !== null).length;
+
+    // Category breakdown of used cost
+    const catMap = {};
+    usage.forEach(u => {
+      if (u.used_cost !== null) {
+        if (!catMap[u.category]) catMap[u.category] = { category: u.category, used_cost: 0, used_qty: 0 };
+        catMap[u.category].used_cost += u.used_cost;
+        catMap[u.category].used_qty += u.used_qty;
+      }
+    });
+
+    res.json({
+      week_start: startStr,
+      week_end: new Date(end.getTime() - 86400000).toISOString().split('T')[0],
+      total_used_cost: totalUsedCost,
+      total_received_qty: totalReceivedQty,
+      items_counted: itemsCounted,
+      total_items: usage.length,
+      usage,
+      by_category: Object.values(catMap).sort((a, b) => b.used_cost - a.used_cost)
+    });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
