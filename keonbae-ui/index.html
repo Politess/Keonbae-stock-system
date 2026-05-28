@@ -1012,7 +1012,7 @@
         { id: 'myOrders', icon: 'ti-file-text', label: 'My Orders' },
         { id: 'newOrder', icon: 'ti-plus', label: 'New Order' },
         { id: 'myStock', icon: 'ti-package', label: 'My Stock' },
-	{ id: 'centralStock', icon: 'ti-building-store', label: 'All Restaurant Stocks' },
+	{ id: 'centralStock', icon: 'ti-building-store', label: 'Central Kitchen Stock' },
         { id: 'lowStock', icon: 'ti-alert-triangle', label: 'Low Stock Alerts' },
         { id: 'movements', icon: 'ti-history', label: 'Stock Log' }
       ];
@@ -1044,7 +1044,7 @@
         else if (section === 'items') await loadItems();
 	else if (section === 'restaurantStocks') await loadRestaurantStocks();
 	else if (section === 'centralKitchen') await loadKitchenStock();
-	else if (section === 'centralStock') await loadAllRestaurantStocks();
+	else if (section === 'centralStock') await loadKitchenStock();
         else if (section === 'restaurants') await loadRestaurants();
 	else if (section === 'monthlySummary') await loadMonthlySummary();
         else if (section === 'users') await loadUsers();
@@ -1944,7 +1944,7 @@
         restaurantStock: 'Restaurant Stocks',
 	centralKitchen: 'Central Kitchen Stock',
 	myStock: 'My Restaurant Stock',
-        centralStock: 'All Restaurant Stocks',
+        centralStock: 'Central Kitchen Stock',
         lowStock: 'Low Stock Alerts',
         movements: 'Stock Movement Log',
         items: 'Item Management',
@@ -1960,7 +1960,7 @@
       if (s === 'dashboard') return renderDashboard();
       if (s === 'orders' || s === 'myOrders') return renderOrders();
       if (s === 'kitchenStock') return renderKitchenStock();
-      if (s === 'centralStock') return renderCentralStockView();
+      if (s === 'centralStock') return renderCentralStockReadOnly();
       if (s === 'myStock') return renderMyStock();
       if (s === 'lowStock') return renderLowStock();
       if (s === 'movements') return renderMovements();
@@ -2185,6 +2185,72 @@
         actions.push(`<button class="btn btn-sm" onclick="receiveOrder('${o.id}')"><i class="ti ti-circle-check"></i> Confirm</button>`);
       }
       return actions.length ? `<div style="display:flex;gap:6px">${actions.join('')}</div>` : '<span style="color:var(--text-tertiary)">-</span>';
+    }
+   
+    function renderCentralStockReadOnly() {
+      const filtered = applyFilters(state.kitchenStock);
+      const lowItems = state.kitchenStock.filter(i => i.is_low).length;
+      
+      return `
+        <div class="alert alert-info" style="background:var(--bg-info);color:var(--text-info);margin-bottom:16px;padding:12px 16px;border-radius:var(--radius-md);font-size:13px;display:flex;align-items:center;gap:10px">
+          <i class="ti ti-info-circle"></i>
+          <div>
+            <strong>View only:</strong> This shows what the central kitchen has available. You can only order up to these quantities.
+          </div>
+        </div>
+        
+        <div class="cards-row">
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-package"></i> Total Items</div>
+            <div class="mval">${state.kitchenStock.length}</div>
+            <div class="msub">In central kitchen</div>
+          </div>
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-alert-triangle"></i> Low Stock</div>
+            <div class="mval ${lowItems > 0 ? 'danger' : 'ok'}">${lowItems}</div>
+            <div class="msub">Limited availability</div>
+          </div>
+          <div class="metric-card">
+            <div class="mlabel"><i class="ti ti-circle-check"></i> Available</div>
+            <div class="mval ok">${state.kitchenStock.length - lowItems}</div>
+            <div class="msub">Ready to order</div>
+          </div>
+        </div>
+        
+        ${renderFilterBar(state.kitchenStock)}
+        
+        <div class="panel">
+          <div class="panel-header">
+            <h3><i class="ti ti-building-warehouse"></i> Central Kitchen Available Stock</h3>
+            <span style="font-size:12px;color:var(--text-secondary)">${filtered.length} of ${state.kitchenStock.length} items</span>
+          </div>
+          ${filtered.length === 0 ? '<div class="empty"><i class="ti ti-package"></i>No items found</div>' : `
+            <table>
+              <thead>
+                <tr><th>SKU</th><th>Item</th><th>Category</th><th>Available</th><th>Level</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                ${filtered.map(i => {
+                  const qty = parseFloat(i.quantity);
+                  const min = parseFloat(i.min_quantity);
+                  const pct = Math.min(100, (qty / Math.max(min * 2, 1)) * 100);
+                  const col = qty < min ? '#E24B4A' : qty < min * 1.3 ? '#BA7517' : '#1D9E75';
+                  return `
+                    <tr>
+                      <td style="font-family:monospace;font-size:11px;color:var(--text-secondary)">${i.sku || '-'}</td>
+                      <td style="font-weight:500">${i.name}</td>
+                      <td style="color:var(--text-secondary)">${i.category}</td>
+                      <td style="font-weight:600">${qty.toFixed(1)} ${i.unit}</td>
+                      <td><div class="stock-bar-bg"><div class="stock-bar-fill" style="width:${pct}%;background:${col}"></div></div></td>
+                      <td>${qty <= 0 ? '<span class="badge badge-low">Out of stock</span>' : i.is_low ? '<span class="badge badge-low">Low</span>' : '<span class="badge badge-ok">Available</span>'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+      `;
     }
     
     function renderCentralStockView() {
